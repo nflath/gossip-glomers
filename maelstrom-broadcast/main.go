@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -14,6 +15,7 @@ type BroadcastState struct {
 	node string
 }
 
+
 func main() {
 	n := maelstrom.NewNode()
 
@@ -22,8 +24,23 @@ func main() {
 	var mu sync.Mutex
 
 	neighbors := make([]interface{},0)
-
 	outstanding_messages := make(map[BroadcastState]float64)
+
+	timeoutLoop := func() {
+		mu.Lock()
+		defer mu.Unlock()
+
+		for bs, val := range outstanding_messages {
+			var body map[string]any
+			body["type"]="broadcast"
+			body["message"] = val
+
+			n.RPC(bs.node, body, nil)
+		}
+
+		time.Sleep(1 * time.Second)		
+	}
+	go timeoutLoop()
 
 	// Register a handler for the "echo" message that responds with an "echo_ok".
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
@@ -58,17 +75,17 @@ func main() {
 		return n.Reply(msg, body)
 	})
 
-	// n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
-	// 	mu.Lock()
-	// 	defer mu.Unlock()
-	// 	var body map[string]any
-	// 	if err := json.Unmarshal(msg.Body, &body); err != nil {
-	// 		return err
-	// 	}
-	// 	bs := BroadcastState{msg_id: body["msg_id"].(float64), node: msg.Src}
-	// 	delete(outstanding_messages,bs)
-	// 	return nil
-	// });
+	n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+		var body map[string]any
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+		bs := BroadcastState{msg_id: body["msg_id"].(float64), node: msg.Src}
+		delete(outstanding_messages,bs)
+		return nil
+	});
 
 	n.Handle("read", func(msg maelstrom.Message) error {
 		// Unmarshal the message body as an loosely-typed map.
