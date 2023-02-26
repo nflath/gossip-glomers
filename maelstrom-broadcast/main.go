@@ -27,19 +27,30 @@ func main() {
 	outstanding_messages := make(map[BroadcastState]float64)
 
 	timeoutLoop := func() {
-		mu.Lock()
-		defer mu.Unlock()
+		for(true) {
+			{
+				mu.Lock()
+				log.Printf("Waking up")
 
-		for bs, val := range outstanding_messages {
-			var body map[string]any
-			body["type"]="broadcast"
-			body["message"] = val
+				for bs, val := range outstanding_messages {
+					log.Printf("Retrying message: %s %s %s", bs.msg_id, bs.node, val)
+					body :=make(map[string]any)
 
-			n.RPC(bs.node, body, nil)
+					body["type"]="broadcast"
+					body["message"] = val
+					body["msg_id"] = bs.msg_id
+
+					n.RPC(bs.node, body, nil)
+					
+				}
+				mu.Unlock()
+
+			}
+			time.Sleep(250 * time.Millisecond)
 		}
 
-		time.Sleep(1 * time.Second)		
 	}
+
 	go timeoutLoop()
 
 	// Register a handler for the "echo" message that responds with an "echo_ok".
@@ -65,6 +76,9 @@ func main() {
 		messages_arr = append(messages_arr, message.(float64))
 		
 		for _, neighbor := range neighbors {
+			if(neighbor == msg.Src) {
+				continue;
+			}
 			bs := BroadcastState{msg_id: body["msg_id"].(float64), node: neighbor.(string)}
 			outstanding_messages[bs] = message.(float64)
 			n.RPC(neighbor.(string), body, nil)
