@@ -92,12 +92,17 @@ func main() {
 	n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
 		mu.Lock()
 		defer mu.Unlock()
+
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
+
 		bs := BroadcastState{msg_id: body["msg_id"].(float64), node: msg.Src}
+		fmt.Println(outstanding_messages)
 		delete(outstanding_messages,bs)
+		fmt.Println(outstanding_messages)
+
 		return nil
 	});
 
