@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"strconv"
 	"os"
 	"sync"
 	"time"
@@ -11,47 +12,105 @@ import (
 )
 
 type BroadcastState struct {
-	msg_id float64
 	node string
+	msg_id float64
+}
+
+type BroadcastData struct{
+	time time.Time
+	val float64
 }
 
 
+func generate_topo(num_nodes int, num_children int) map[string][]interface{} {
+	topology := make(map[string][]interface{},0)
+
+	remaining := make([]string,0)
+	
+
+	for i := 0; i < 25; i++ {
+		remaining = append(remaining, "n" + strconv.Itoa(i))
+		topology["n" + strconv.Itoa(i)] = make([]interface{},0)
+	}
+	
+	for ; len(remaining) > 0;  {
+		cur := remaining[0]
+		remaining = remaining[1:]
+		if(len(remaining) == 0) {
+			topology[cur] = append(topology[cur], "n0")
+			topology["n0"] = append(topology["n0"], cur)
+		}
+		for  j := 0; j < num_children && len(remaining) > 0; j++ {
+			next := remaining[0];
+			remaining = remaining[1:]
+			topology[cur] = append(topology[cur], next)
+			topology[next] = append(topology[next], cur)
+		}
+	}
+
+	log.Printf("Print %s", topology)	
+
+	return topology
+}
+
 func main() {
 	n := maelstrom.NewNode()
+
+	var nextId float64 = 1
 
 	messages := make(map[float64]bool)
 	var messages_arr []float64
 	var mu sync.Mutex
 
 	neighbors := make([]interface{},0)
-	outstanding_messages := make(map[BroadcastState]float64)
+	outstanding_messages := make(map[BroadcastState]BroadcastData)
+
+	broadcast_ok := func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		var body map[string]any
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+
+		bs := BroadcastState{msg_id: body["msg_id"].(float64), node: msg.Src}
+		log.Printf("Deleting %s %s", bs, len(outstanding_messages))
+		delete(outstanding_messages,bs)
+		log.Printf("Deleting %s %s", bs, len(outstanding_messages))
+		
+		return nil
+	}
 
 	timeoutLoop := func() {
 		for(true) {
 			{
 				mu.Lock()
-				log.Printf("Waking up")
+				for bs, bd := range outstanding_messages {
+					if (bd.time.Before(time.Now())) {
+						log.Printf("Retrying message: %s %s %s", bs.msg_id, bs.node, bd.val)
+						body :=make(map[string]any)
+						
+						body["type"]="broadcast"
+						body["message"] = bd.val
 
-				for bs, val := range outstanding_messages {
-					log.Printf("Retrying message: %s %s %s", bs.msg_id, bs.node, val)
-					body :=make(map[string]any)
+						bs_ := BroadcastState{msg_id: nextId, node: bs.node}
+						nextId = nextId + 1
+						bd_ := BroadcastData{val: bd.val, time: time.Now().Add(220 * time.Millisecond)}
 
-					body["type"]="broadcast"
-					body["message"] = val
-					body["msg_id"] = bs.msg_id
-
-					n.RPC(bs.node, body, nil)
+						delete(outstanding_messages, bs)
+						outstanding_messages[bs_] = bd_
+						
+						n.RPC(bs.node, body, broadcast_ok)
+					}
 					
 				}
 				mu.Unlock()
-
+				
+				time.Sleep(10 * time.Millisecond)
 			}
-			time.Sleep(250 * time.Millisecond)
 		}
-
 	}
-
-	go timeoutLoop()
 
 	// Register a handler for the "echo" message that responds with an "echo_ok".
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
@@ -79,9 +138,15 @@ func main() {
 			if(neighbor == msg.Src) {
 				continue;
 			}
-			bs := BroadcastState{msg_id: body["msg_id"].(float64), node: neighbor.(string)}
-			outstanding_messages[bs] = message.(float64)
-			n.RPC(neighbor.(string), body, nil)
+
+			bs := BroadcastState{msg_id: nextId, node: neighbor.(string)}
+			nextId = nextId + 1
+			bd := BroadcastData{val: message.(float64), time: time.Now().Add(220 * time.Millisecond)}
+			
+			n.RPC(neighbor.(string), body, broadcast_ok)
+
+			outstanding_messages[bs] = bd
+
 		}
 
 		body["type"] = "broadcast_ok"
@@ -89,22 +154,6 @@ func main() {
 		return n.Reply(msg, body)
 	})
 
-	n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
-		mu.Lock()
-		defer mu.Unlock()
-
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
-
-		bs := BroadcastState{msg_id: body["msg_id"].(float64), node: msg.Src}
-		fmt.Println(outstanding_messages)
-		delete(outstanding_messages,bs)
-		fmt.Println(outstanding_messages)
-
-		return nil
-	});
 
 	n.Handle("read", func(msg maelstrom.Message) error {
 		// Unmarshal the message body as an loosely-typed map.
@@ -134,7 +183,9 @@ func main() {
 
 		topo := body["topology"]
 		var topology map[string]interface{} = topo.(map[string]interface{})
+		//		var topology map[string][]interface{} = generate_topo(25,3)
 		neighbors = topology[n.ID()].([]interface{})
+		log.Printf("neighbors:: %s", neighbors)
 		delete(body, "topology")
 
 		// Update the message type.
@@ -143,6 +194,8 @@ func main() {
 		// Echo the original message back with the updated message type.
 		return n.Reply(msg, body)
 	})
+
+	go timeoutLoop()
 
 	// Execute the node's message loop. This will run until STDIN is closed.
 	if err := n.Run(); err != nil {
