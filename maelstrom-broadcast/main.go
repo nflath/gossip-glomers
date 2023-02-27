@@ -96,7 +96,7 @@ func main() {
 
 						bs_ := BroadcastState{msg_id: nextId, node: bs.node}
 						nextId = nextId + 1
-						bd_ := BroadcastData{val: bd.val, time: time.Now().Add(220 * time.Millisecond)}
+						bd_ := BroadcastData{val: bd.val, time: time.Now().Add(230 * time.Millisecond)}
 
 						delete(outstanding_messages, bs)
 						outstanding_messages[bs_] = bd_
