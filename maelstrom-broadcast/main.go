@@ -138,6 +138,8 @@ func main() {
 			if(neighbor == msg.Src) {
 				continue;
 			}
+			log.Printf("%s %s", neighbor, msg.Src)
+			
 
 			bs := BroadcastState{msg_id: nextId, node: neighbor.(string)}
 			nextId = nextId + 1
