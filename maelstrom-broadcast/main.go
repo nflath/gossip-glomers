@@ -26,9 +26,8 @@ func generate_topo(num_nodes int, num_children int) map[string][]interface{} {
 	topology := make(map[string][]interface{},0)
 
 	remaining := make([]string,0)
-	
 
-	for i := 0; i < 25; i++ {
+		for i := 0; i < 25; i++ {
 		remaining = append(remaining, "n" + strconv.Itoa(i))
 		topology["n" + strconv.Itoa(i)] = make([]interface{},0)
 	}

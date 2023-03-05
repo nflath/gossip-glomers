@@ -1,29 +1,117 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
+	"sync"
+	"encoding/json"
 	"os"
-
+	"context"
+	
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
 func main() {
 	n := maelstrom.NewNode()
-	kv := maelstrom.NewKv(n)
+	kv := maelstrom.NewSeqKV(n)
+	ctx := context.Background()
+
+	var count float64 = 0
+	var mu sync.Mutex
 
 	// Register a handler for the "echo" message that responds with an "echo_ok".
-	n.Handle("echo", func(msg maelstrom.Message) error {
-		// Unmarshal the message body as an loosely-typed map.
+	n.Handle("add", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
+		delta := body["delta"].(float64)
 
-		// Update the message type.
-		body["type"] = "echo_ok"
+		count = count + delta
+		
+		for(true) {
+			err := kv.Write(ctx, n.ID(), count)
+			if(err != nil) { log.Printf("Err on write: %s",err) }
+			v, err := kv.Read(ctx, n.ID())
+			if(err != nil) { v = -1; }
 
-		neighbors 
+			log.Printf("%s %s", count, v)
+			if(v == int(count)) { break; }
+			
+			log.Printf("Retrying write")
+			
+		}
+
+		reply_body := make(map[string]any)
+		reply_body["type"] = "add_ok"
+		// Echo the original message back with the updated message type.
+		return n.Reply(msg, reply_body)
+	})
+
+	n.Handle("local", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		body := make(map[string]any)
+		body["type"] = "local_ok"
+		v, err := kv.Read(ctx, n.ID())
+		if(err != nil) {
+			body["val"] =  v
+		} else {
+			body["val"] =  0
+		}
+
+		return n.Reply(msg, body)
+	})
+
+	n.Handle("read", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		reply_body := make(map[string]any)
+		reply_body["type"] = "read_ok"
+
+		local_body := make(map[string]any)
+		local_body["type"] = "local"
+
+		i, err := kv.ReadInt(ctx, n.ID())
+
+		var j_r maelstrom.Message;
+		var k_r maelstrom.Message;
+		
+		if(n.ID() == "n0") {
+			j_r, err = n.SyncRPC(ctx, "n1", local_body)
+			k_r, err = n.SyncRPC(ctx, "n2", local_body)
+		} else if(n.ID() == "n1") {
+			j_r, err = n.SyncRPC(ctx, "n0", local_body)
+			k_r, err = n.SyncRPC(ctx, "n2", local_body)
+		} 	else {
+			j_r, err = n.SyncRPC(ctx, "n0", local_body)
+			k_r, err = n.SyncRPC(ctx, "n1", local_body)
+		}
+
+		
+
+
+		var body map[string]any
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+		j := body["val"]
+
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+		k := body["val"]
+		
+
+		if(err != nil) { k = 0 }
+
+		log.Printf("%s %s %s", i, j, k)
+
+		body["value"] = i+j+k
 
 		// Echo the original message back with the updated message type.
 		return n.Reply(msg, body)

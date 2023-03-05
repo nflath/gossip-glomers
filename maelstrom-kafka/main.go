@@ -11,10 +11,13 @@ import (
 
 func main() {
 	n := maelstrom.NewNode()
-	//kv := maelstrom.NewSeqKV(n)
-	//	ctx := context.Background()
+
+	log := make(map[string]map[float64]float64);
 
 	var mu sync.Mutex
+
+	var offset := 0
+	var committed_offsets := make(map[string][]float64)
 
 	n.Handle("send", func(msg maelstrom.Message) error {
 		mu.Lock()
@@ -25,9 +28,11 @@ func main() {
 			return err
 		}
 
-		//key := body["key"].(string)
-		//		msg_ := body["msg"].(float64)
+		key := body["key"].(string)
+		msg_ := body["msg"].(float64)
 
+		log[key][offset] = msg_
+		offset += 1
 
 		reply_body := make(map[string]any)
 		reply_body["type"] = "send_ok"
@@ -61,8 +66,7 @@ func main() {
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
-		//		offsets := body["offsets"]
-
+		offsets := body["offsets"]
 
 		reply_body := make(map[string]any)
 		reply_body["type"] = "commit_offsets_ok"
