@@ -22,7 +22,6 @@ func main() {
 		// Update the message type.
 		body["type"] = "echo_ok"
 
-		neighbors 
 
 		// Echo the original message back with the updated message type.
 		return n.Reply(msg, body)
