@@ -12,28 +12,23 @@ import (
 
 func main() {
 	pid := os.Getpid()
-	
+
 	n := maelstrom.NewNode()
 	i := 0
 
 	// Register a handler for the "echo" message that responds with an "echo_ok".
 	n.Handle("generate", func(msg maelstrom.Message) error {
 		// Unmarshal the message body as an loosely-typed map.
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
+		var reply_body = make(map[string]any)
 
-		// Update the message type.
-		body["type"] = "generate_ok"
 
-		now := time.Now()
-		nano := now.UnixNano()
+		reply_body["type"] = "generate_ok"
 
-		body["id"] = strconv.Itoa(pid) + "-" + strconv.FormatInt(nano,10) + "-" + strconv.Itoa(i);
+		nano := now.Now().UnixNano()
+		body["id"] = n.ID() + "-" + strconv.FormatInt(nano,10) + "-" + strconv.Itoa(i);
+
 		i += 1
-		// Echo the original message back with the updated message type.		
-		
+
 		return n.Reply(msg, body)
 	})
 
