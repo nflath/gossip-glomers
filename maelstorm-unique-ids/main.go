@@ -1,19 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
-"strconv"
-	"os"
+"os"
+	"strconv"
 	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
 func main() {
-	pid := os.Getpid()
-
-	n := maelstrom.NewNode()
+		n := maelstrom.NewNode()
 	i := 0
 
 	// Register a handler for the "echo" message that responds with an "echo_ok".
@@ -21,15 +18,14 @@ func main() {
 		// Unmarshal the message body as an loosely-typed map.
 		var reply_body = make(map[string]any)
 
-
 		reply_body["type"] = "generate_ok"
 
-		nano := now.Now().UnixNano()
-		body["id"] = n.ID() + "-" + strconv.FormatInt(nano,10) + "-" + strconv.Itoa(i);
+		nano := time.Now().UnixNano()
+		reply_body["id"] = n.ID() + "-" + strconv.FormatInt(nano,10) + "-" + strconv.Itoa(i);
 
 		i += 1
 
-		return n.Reply(msg, body)
+		return n.Reply(msg, reply_body)
 	})
 
 	// Execute the node's message loop. This will run until STDIN is closed.

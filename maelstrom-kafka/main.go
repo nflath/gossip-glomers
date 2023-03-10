@@ -12,12 +12,12 @@ import (
 func main() {
 	n := maelstrom.NewNode()
 
-	log := make(map[string]map[float64]float64);
+	node_log := make(map[string]map[float64]float64);
 
 	var mu sync.Mutex
 
-	var offset := 0
-	var committed_offsets := make(map[string][]float64)
+	var offset float64 = 0
+	//committed_offsets := make(map[string][]float64)
 
 	n.Handle("send", func(msg maelstrom.Message) error {
 		mu.Lock()
@@ -31,7 +31,7 @@ func main() {
 		key := body["key"].(string)
 		msg_ := body["msg"].(float64)
 
-		log[key][offset] = msg_
+		node_log[key][offset] = msg_
 		offset += 1
 
 		reply_body := make(map[string]any)
@@ -45,10 +45,10 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
+		// var body map[string]any
+		// if err := json.Unmarshal(msg.Body, &body); err != nil {
+		// 	return err
+		// }
 
 		//		offsets := body["offsets"]
 
@@ -62,14 +62,14 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
-		offsets := body["offsets"]
-
-		reply_body := make(map[string]any)
-		reply_body["type"] = "commit_offsets_ok"
+		// var body map[string]any
+		// if err := json.Unmarshal(msg.Body, &body); err != nil {
+		// 	return err
+		// }
+		// offsets := body["offsets"]
+		
+		 reply_body := make(map[string]any)
+		 reply_body["type"] = "commit_offsets_ok"
 
 		return n.Reply(msg, reply_body)
 	})
@@ -78,16 +78,18 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
-		//		keys := body["keys"]
+		// var body map[string]any
+		// if err := json.Unmarshal(msg.Body, &body); err != nil {
+		// 	return err
+		// }
+		// keys := body["keys"] 
+		// for key : range keys 
 
-		reply_body := make(map[string]any)
+		var reply_body = make(map[string]any)
 		reply_body["type"] = "list_commited_offsets_ok"
+		
 
-		return n.Reply(msg, body)
+		return n.Reply(msg, reply_body)
 	})
 
 	// Execute the node's message loop. This will run until STDIN is closed.
