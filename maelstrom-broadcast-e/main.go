@@ -113,7 +113,6 @@ func main() {
 
 		}
 	}
-
 	go sendLoop()
 
 	handle_message := func (message float64, src string) {
