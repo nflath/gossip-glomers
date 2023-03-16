@@ -1,0 +1,81 @@
+package main
+
+import (
+	"log"
+	"sync"
+	"encoding/json"
+	"os"
+	"context"
+	
+	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
+)
+
+func main() {
+	n := maelstrom.NewNode()
+	kv := maelstrom.NewSeqKV(n)
+	ctx := context.Background()
+
+	var count float64 = 0
+	var mu sync.Mutex
+
+	n.Handle("send", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		var body map[string]any
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+		delta := body["delta"].(float64)
+
+		count = count + delta
+		
+		for(true) {
+			err := kv.Write(ctx, n.ID(), count)
+			if(err != nil) { log.Printf("Err on write: %s",err) }
+			v, err := kv.Read(ctx, n.ID())
+			if(err != nil) { v = -1; }
+
+			log.Printf("%s %s", count, v)
+			if(v == int(count)) { break; }
+			
+			log.Printf("Retrying write")
+			
+		}
+
+		reply_body := make(map[string]any)
+		reply_body["type"] = "add_ok"
+		// Echo the original message back with the updated message type.
+		return n.Reply(msg, reply_body)
+	})
+
+	n.Handle("poll", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+
+		return n.Reply(msg, body)
+	})
+
+	n.Handle("commit_offsets", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+
+		return n.Reply(msg, body)
+	})
+
+	n.Handle("list_committed_offsets", func(msg maelstrom.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+
+		return n.Reply(msg, body)
+	})
+
+	// Execute the node's message loop. This will run until STDIN is closed.
+	if err := n.Run(); err != nil {
+		log.Printf("ERROR: %s", err)
+		os.Exit(1)
+	}
+}
