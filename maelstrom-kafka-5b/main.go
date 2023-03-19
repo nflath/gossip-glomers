@@ -5,6 +5,8 @@ package main
 
 import (
 	"log"
+	"time"
+	"context"
 	"sync"
 	"encoding/json"
 	"os"
@@ -15,15 +17,24 @@ import (
 func main() {
 	n := maelstrom.NewNode()
 
-	
-
 	var mu sync.Mutex
 
-	var next_offset = make(map[string]float64)
-	var committed_offset = make(map[string]float64)
-	node_log := make(map[string]map[float64]float64);
+	// List of next attempting off 
+	next_offset := make(map[string]float64)
+	node_log := make(map[string]map[float64]float64);	
+	committed_offset := make(map[string]float64)
+	
 
+	kv := maelstrom.NewLinKV(n)
+	
 	n.Handle("send", func(msg maelstrom.Message) error {
+
+		if(n.ID() == "n1") {
+			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
+			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			return n.Reply(msg, reply_body)
+		}
+
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -35,17 +46,32 @@ func main() {
 		key := body["key"].(string)
 		msg_ := body["msg"].(float64)
 
-		_, ok := next_offset[key]
+		for {
+			var kv_err error = nil
+			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
+			
+			if(next_offset[key] == 0) {
+				kv_err = kv.CompareAndSwap(ctx, key, nil, 0, true)
+			} else {
+				kv_err = kv.CompareAndSwap(ctx, key, next_offset[key]-1, next_offset[key], false)
+			}
+
+			if(kv_err != nil) {
+				log.Printf("Error: %s", kv_err)
+				next_offset[key]++
+			} else {
+				break;
+			}
+		}
+
+		offset := next_offset[key]
+		next_offset[key] += 1
+
+		_, ok := node_log[key]
 		if (ok == false) {
-			next_offset[key] = 0
-			//committed_offset[key] = 0
 			node_log[key] = make(map[float64]float64)
 		}
-		offset := next_offset[key]
-
-		next_offset[key] = next_offset[key]+1
 		node_log[key][offset] = msg_
-
 
 		reply_body := make(map[string]any)
 		reply_body["type"] = "send_ok"
@@ -54,15 +80,20 @@ func main() {
 	})
 
 	n.Handle("poll", func(msg maelstrom.Message) error {
+		if(n.ID() == "n1") {
+			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
+			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			return n.Reply(msg, reply_body)
+		}
+
 		mu.Lock()
 		defer mu.Unlock()
-		
+
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 		 	return err
 		}
-		//keys := body["keys"].([]interface{})
-		
+				
 		var offsets map[string]interface{} = body["offsets"].(map[string]interface{})
 		
 		reply_body := make(map[string]any)
@@ -85,6 +116,13 @@ func main() {
 	})
 
 	n.Handle("commit_offsets", func(msg maelstrom.Message) error {
+
+		if(n.ID() == "n1") {
+			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
+			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			return n.Reply(msg, reply_body)
+		}
+
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -106,8 +144,17 @@ func main() {
 	})
 
 	n.Handle("list_committed_offsets", func(msg maelstrom.Message) error {
-		mu.Lock()
+		
+		if(n.ID() == "n1") {
+			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
+			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			return n.Reply(msg, reply_body)
+		}
+
+mu.Lock()
 		defer mu.Unlock()
+
+
 
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {

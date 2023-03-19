@@ -146,7 +146,7 @@ func main() {
 			nextId = nextId + 1
 			bd := BroadcastData{val: message.(float64), time: time.Now().Add(220 * time.Millisecond)}
 
-			n.RPC(neighbor.(string), body, broadcast_ok)
+			n.pRPC(neighbor.(string), body, broadcast_ok)
 
 			outstanding_messages[bs] = bd
 
