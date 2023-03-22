@@ -1,8 +1,23 @@
+// This was a bit of a pain, mainly due to the key-value store being malicious.
+// Not only may it return past values, it always will - it will never converge,
+// no matter how long it waits.
+
+// Other than that, it's pretty chill.  Each node has a particular key it
+// encrements on send, and it keeps re-trying to set the value for a new one
+// until it suceeds.  May have problems if nodes crash, but they don't here, so
+// hey.  Also, even if they did, you can't really prevent mutliple increments,
+// so probably still fine.
+
+// To prevent the malicious KV behaviour, read() will contact other nodes in
+// order to see what their local values are for their counters.  So that will
+// converge, as long as you can eventually contact all nodes.  We cache the last
+// value from each node, just in case.
+
 package main
 
 import (
 	"log"
-"time"
+	"time"
 	"sync"
 	"encoding/json"
 	"os"
@@ -11,7 +26,7 @@ import (
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
-func main() {
+func main() {     
 	n := maelstrom.NewNode()
 	kv := maelstrom.NewSeqKV(n)
 
@@ -21,7 +36,6 @@ func main() {
 	var last_j float64 = 0
 	var last_k float64 = 0
 
-	// Register a handler for the "echo" message that responds with an "echo_ok".
 	n.Handle("add", func(msg maelstrom.Message) error {
 		mu.Lock()
 		defer mu.Unlock()
@@ -34,9 +48,11 @@ func main() {
 		}
 		delta := body["delta"].(float64)
 
+		// Update our local count
 		count = count + delta
 
 		for(true) {
+			// Try writing to the KV store untli we succeed.
 			err := kv.Write(ctx, n.ID(), count)
 			if(err != nil) { log.Printf("Err on write: %s",err) }
 			v, err := kv.Read(ctx, n.ID())
@@ -46,16 +62,16 @@ func main() {
 			if(v == int(count)) { break; }
 
 			log.Printf("Retrying write")
-
 		}
 
 		reply_body := make(map[string]any)
 		reply_body["type"] = "add_ok"
-		// Echo the original message back with the updated message type.
 		return n.Reply(msg, reply_body)
 	})
 
 	n.Handle("local", func(msg maelstrom.Message) error {
+		// Local message, outside of specification.  Read from our key and return the count from it.
+		// Could probably just not do that, and return the local value.
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -134,7 +150,6 @@ func main() {
 		reply_body["value"] = float64(i)+j+k
 		reply_body["type"] = "read_ok"
 
-		// Echo the original message back with the updated message type.
 		return n.Reply(msg, reply_body)
 	})
 

@@ -1,3 +1,5 @@
+// With a single node, very easy.  Just maintain a local key-value store.
+
 package main
 
 import (
@@ -39,9 +41,6 @@ func main() {
 			}
 				  
 		}
-		
-
-
 
 		var reply_body = make(map[string]any)
 
