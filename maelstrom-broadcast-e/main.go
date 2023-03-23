@@ -170,8 +170,8 @@ func main() {
 			return err
 		}
 
-
 		message := body["message"]
+		// Apply all values in the message locally, plus send to all our neighbors.
 		switch  message.(type) {
 		case float64:
 			handle_message(message.(float64),msg.Src)
@@ -181,27 +181,25 @@ func main() {
 			}
 		}
 
-
 		var reply_body = make(map[string]any)
 		reply_body["type"] = "broadcast_ok"
 		return n.Reply(msg, reply_body)
 	})
 
 	n.Handle("read", func(msg maelstrom.Message) error {
-		// Unmarshal the message body as an loosely-typed map.
+		// Just return our local array
 		mu.Lock()
 		defer mu.Unlock()
 
 		var reply_body = make(map[string]any)
-
 		reply_body["type"] = "read_ok"
 		reply_body["messages"] = messages_arr
-
-
 		return n.Reply(msg, reply_body)
 	})
 
 	n.Handle("topology", func(msg maelstrom.Message) error {
+		// Ignore the message with the actual topology and just generate our own.
+		// TODO(nflath): Use the actual node names and count, at least.
 		mu.Lock()
 		defer mu.Unlock()
 		

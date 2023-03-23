@@ -2,11 +2,13 @@
 // Not only may it return past values, it always will - it will never converge,
 // no matter how long it waits.
 
-// Other than that, it's pretty chill.  Each node has a particular key it
-// encrements on send, and it keeps re-trying to set the value for a new one
-// until it suceeds.  May have problems if nodes crash, but they don't here, so
-// hey.  Also, even if they did, you can't really prevent mutliple increments,
-// so probably still fine.
+// Other than that, it's pretty chill.  Each node has a particular key in a
+// SeqKV it increments on send, and it keeps re-trying to set the value for a
+// new one until it suceeds.  May have problems if nodes crash(because the
+// current value for the node is stored locally, to know what to increment
+// here), but they don't here, so hey.  Also, even if they did, you can't really
+// prevent mutliple increments from the client with this framework, so probably
+// still fine.
 
 // To prevent the malicious KV behaviour, read() will contact other nodes in
 // order to see what their local values are for their counters.  So that will
@@ -98,9 +100,12 @@ func main() {
 
 		ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
 		i, err := kv.ReadInt(ctx, n.ID())
+
+		// FInd the values from the other nodes.
+		// TODO(nflath): Generalize to more nodes
+		// TODO(nflath): parallellize
 		var j_r maelstrom.Message;
 		var k_r maelstrom.Message;
-
 		if(n.ID() == "n0") {
 			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
 			j_r, err = n.SyncRPC(ctx, "n1", local_body)
@@ -118,7 +123,6 @@ func main() {
 			k_r, err = n.SyncRPC(ctx, "n1", local_body)
 		}
 
-
 		var body map[string]any
 		var j float64
 		var k float64
@@ -135,18 +139,11 @@ func main() {
 			k = body["val"].(float64)
 		}
 
-
 		last_j = j
 		last_k = k
 
-		if(err != nil) { k = 0 }
-
-		log.Printf("%s %s %s", i, j, k)
-
-
-
+		// Return the sum of the nodes' count
 		reply_body = make(map[string]any)
-
 		reply_body["value"] = float64(i)+j+k
 		reply_body["type"] = "read_ok"
 

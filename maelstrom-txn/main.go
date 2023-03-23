@@ -1,4 +1,5 @@
-// With a single node, very easy.  Just maintain a local key-value store.
+// With a single node, very easy.  Just maintain a local key-value store, update it every txn.
+// Would be harder if we had to deal with node crashes, of course.
 
 package main
 
@@ -16,7 +17,9 @@ func main() {
 	var mu sync.Mutex
 
 	var kv = make(map[float64]float64)
+
 	n.Handle("txn", func(msg maelstrom.Message) error {
+		// Apply the given txn to our KV store and return the result.
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -26,7 +29,6 @@ func main() {
 		}
 
 		txn := body["txn"].( []interface{} )
-
 		for _, op := range txn {
 			op_ := op.([]interface{})
 			typ := op_[0].(string)
@@ -43,8 +45,6 @@ func main() {
 		}
 
 		var reply_body = make(map[string]any)
-
-
 		reply_body["type"] = "txn_ok"
 		reply_body["txn"] = txn
 

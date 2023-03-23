@@ -6,8 +6,12 @@
 // when a txn is updated locally).  Each neighbor maintains a list not only of
 // all the txns it's aware of, but all txns it's neighbors are aware of.  We
 // evaluate all txn updates that node n0 has broadcast, then apply the
-// transaction we just were sent in order to return the value.  Neighbors should
-// be every node, in this case there's only one.
+// transaction we just were sent in order to return the value.  It should really
+// be all the txns every node is aware of, to maintain the ordering properties,
+// but a very strict one would be to wait until every node is aware of every txn
+// up to this one's ID.
+//
+// Neighbors should be every node, in this case there's only one.
 
 package main
 
@@ -36,17 +40,16 @@ func main() {
 	neighbors := make([]interface{}, 0)
 
 	broadcast := func() {
-		// Send all the txns we know about to all other nodes.
-		
+		// Send all the txns we know about to all our neighbors.
 		for _, neighbor := range neighbors {
 			body :=make(map[string]any)
 			body["type"]="broadcast"
 			body["message"] = node_to_txns[n.ID()]
 			n.RPC(neighbor.(string), body, nil)
-			}
+		}
 	}
 
-	// Every 200 ms, broadcast this node's txn
+	// Every 200 ms, broadcast this node's txns.
 	sendLoop := func() {
 		for(true) {
 			mu.Lock()
@@ -113,6 +116,8 @@ func main() {
 		broadcast()
 				
 		// Generate a keystore by applying every txn node n0 knows about
+		// TODO(nflath): Generalize and improve by not having to apply every txn
+		// on every new txn.
 		var local_kv = make(map[float64]float64)
 		for  i := 0; i < int(next_txn_id); i++ {
 			txn_n0, ok_n1 := node_to_txns["n0"][float64(i)]
@@ -162,8 +167,8 @@ func main() {
 	n.Handle("topology", func(msg maelstrom.Message) error {
 		mu.Lock()
 		defer mu.Unlock()
-
-		// TODO(nflath): Ignore the actual topology and use all the other nodes.
+		// TODO(nflath): Ignore the actual topology and use all the other nodes
+		// to generalize than more than 2 nodes.
 		
 		// Unmarshal the message body as an loosely-typed map.
 		var body map[string]any
