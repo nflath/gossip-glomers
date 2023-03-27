@@ -3,7 +3,7 @@
 // retry any message that is unacked for 230 seconds; to get the efficiency
 // constraints, generate a spanning tree, so we only have to send one meesage to
 // each node per client request, and it's constructed with # children to limit
-// the number of hops any message will need to make.
+// the number of hops any message will need to make.  This solves up to 3d.
 
 // The main thing that was a pain was realizing that the msg_id I was setting
 // was getting overwritten by the framework.
@@ -193,12 +193,12 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 
-		var topology map[string][]interface{} = generate_topo(25,3)
+		var topology map[string][]interface{} = generate_topo(1,3)
 		neighbors = topology[n.ID()]
 		
-		delete(body, "topology")
-		body["type"] = "topology_ok"
-		return n.Reply(msg, body)
+		var reply_body = make(map[string]any)
+		reply_body["type"] = "topology_ok"
+		return n.Reply(msg, reply_body)
 	})
 
 	// Execute the node's message loop. This will run until STDIN is closed.
