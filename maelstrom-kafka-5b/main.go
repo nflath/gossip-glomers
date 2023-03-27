@@ -1,5 +1,13 @@
+// The distributed kafka problem.  I had mostly lost interest by this point, so
+// ended up with an implementation that cheats - it just forwards all messages
+// to n0, instead of doing a real distribution.  On the plus side, no CAS
+// failures.  Doing this the real way seemed way harder than problem 6b.
+
+// I spent a lot of time trying to figure out what
 // :error "java.util.concurrent.ExecutionException: clojure.lang.ExceptionInfo: throw+: {:type :no-writer-of-value, :key \"9\", :value 0} {:type :no-writer-of-value, :key \"9\", :value 0}\n at java.util.concurrent.FutureTask.report (FutureTask.java:122)\n    java.util.concurrent.FutureTask.get (FutureTask.java:191)\n    clojure.core$deref_future.invokeStatic (core.clj:2317)\n    clojure.core$future_call$reify__8544.deref (core.clj:7041)\n    clojure.core$deref.invokeStatic (core.clj:2337)\n    clojure.core$deref.invoke (core.clj:2323)\n    jepsen.tests.kafka$analysis.invokeStatic (kafka.clj:1977)\n    jepsen.tests.kafka$analysis.invoke (kafka.clj:1879)\n    jepsen.tests.kafka$checker$reify__19270.check (kafka.clj:2055)\n    jepsen.checker$check_safe.invokeStatic (checker.clj:86)\n    jepsen.checker$check_safe.invoke (checker.clj:79)\n    jepsen.checker$compose$reify__11881$fn__11883.invoke (checker.clj:102)\n    clojure.core$pmap$fn__8552$fn__8553.invoke (core.clj:7089)\n    clojure.core$binding_conveyor_fn$fn__5823.invoke (core.clj:2047)\n    clojure.lang.AFn.call (AFn.java:18)\n    java.util.concurrent.FutureTask.run (FutureTask.java:317)\n    java.util.concurrent.ThreadPoolExecutor.runWorker (ThreadPoolExecutor.java:1144)\n    java.util.concurrent.ThreadPoolExecutor$Worker.run (ThreadPoolExecutor.java:642)\n    java.lang.Thread.run (Thread.java:1589)\nCaused by: clojure.lang.ExceptionInfo: throw+: {:type :no-writer-of-value, :key \"9\", :value 0}\n{:type :no-writer-of-value, :key \"9\", :value 0}\n at slingshot.support$stack_trace.invoke (support.clj:201)\n    jepsen.tests.kafka$wr_graph$reduce_iter_0__19204$reduce_iter_1__19209.invoke (kafka.clj:1842)\n    clojure.core.protocols$iter_reduce.invokeStatic (protocols.clj:49)\n    clojure.core.protocols$fn__8230.invokeStatic (protocols.clj:75)\n    clojure.core.protocols/fn (protocols.clj:75)\n    clojure.core.protocols$fn__8178$G__8173__8191.invoke (protocols.clj:13)\n    clojure.core$reduce.invokeStatic (core.clj:6886)\n    clojure.core$reduce.invoke (core.clj:6868)\n    jepsen.tests.kafka$wr_graph$reduce_iter_0__19204.invoke (kafka.clj:1842)\n    clojure.core.protocols$iter_reduce.invokeStatic (protocols.clj:49)\n    clojure.core.protocols$fn__8230.invokeStatic (protocols.clj:75)\n    clojure.core.protocols/fn (protocols.clj:75)\n    clojure.core.protocols$fn__8178$G__8173__8191.invoke (protocols.clj:13)\n    clojure.core$reduce.invokeStatic (core.clj:6886)\n    clojure.core$reduce.invoke (core.clj:6868)\n    jepsen.tests.kafka$wr_graph.invokeStatic (kafka.clj:1842)\n    jepsen.tests.kafka$wr_graph.invoke (kafka.clj:1838)\n    clojure.core$partial$fn__5908.invoke (core.clj:2641)\n    elle.core$combine$analyze__17049$launch_analysis__17050$task__17051.invoke (core.clj:189)\n    jepsen.history.task.Task.run (task.clj:282)\n    java.util.concurrent.ThreadPoolExecutor.runWorker (ThreadPoolExecutor.java:1144)\n    java.util.concurrent.ThreadPoolExecutor$Worker.run (ThreadPoolExecutor.java:642)\n    java.lang.Thread.run (Thread.java:1589)\n"},
-// WTF does this mean
+// meant before using this approach.  This is just that I wasn't distributing properly.
+
+// TODO(nflath): Do a proper implementation.
 
 package main
 
@@ -19,12 +27,10 @@ func main() {
 
 	var mu sync.Mutex
 
-	// List of next attempting off 
 	next_offset := make(map[string]float64)
 	node_log := make(map[string]map[float64]float64);	
 	committed_offset := make(map[string]float64)
 	
-
 	kv := maelstrom.NewLinKV(n)
 	
 	n.Handle("send", func(msg maelstrom.Message) error {
@@ -50,6 +56,8 @@ func main() {
 			var kv_err error = nil
 			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
 			
+			// Get a unique offset.  This is really unnecessary, since it's only n0
+			// using it.
 			if(next_offset[key] == 0) {
 				kv_err = kv.CompareAndSwap(ctx, key, nil, 0, true)
 			} else {
@@ -100,7 +108,7 @@ func main() {
 		reply_body["type"] = "poll_ok"
 		reply_body["msgs"] = make(map[string][][]float64)
 		for key, val := range offsets {
-			
+			// We must omit key/vals that don't exist
 			_, ok := node_log[key]
 			if (ok == false) {
 				continue
@@ -138,7 +146,7 @@ func main() {
 		}
 		
 		reply_body := make(map[string]any)
-		 reply_body["type"] = "commit_offsets_ok"
+		reply_body["type"] = "commit_offsets_ok"
 
 		return n.Reply(msg, reply_body)
 	})
@@ -150,10 +158,9 @@ func main() {
 			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
 			return n.Reply(msg, reply_body)
 		}
-
-mu.Lock()
+		
+		mu.Lock()
 		defer mu.Unlock()
-
 
 
 		var body map[string]any

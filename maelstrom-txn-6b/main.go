@@ -10,7 +10,7 @@
 // be all the txns every node is aware of, to maintain the ordering properties,
 // but a very strict one would be to wait until every node is aware of every txn
 // up to this one's ID.
-//
+
 // Neighbors should be every node, in this case there's only one.
 
 package main
@@ -30,7 +30,6 @@ func main() {
 	n := maelstrom.NewNode()
 	kv := maelstrom.NewSeqKV(n)
 	var mu sync.Mutex
-
 
 	var next_txn_id float64 = 1
 	
@@ -101,6 +100,9 @@ func main() {
 				true)
 		
 			if(err != nil) {
+				// TODO: We only want to do this if the error is the key being
+				// different, not timeouts etc.  Also would possibly wouldn't
+				// quite work in the case where the ack got lost - may skip an ID.
 				next_txn_id++;
 				continue
 			}

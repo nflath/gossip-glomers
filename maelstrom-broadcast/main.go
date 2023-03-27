@@ -1,4 +1,4 @@
-// Whenever we get a message, just send it on to all neighbors (aside the one
+// Whenever we get a message, just send it on to all 'neighbors' (aside the one
 // that sent it to us.  To deal with partitions, have a retry mechanism and
 // retry any message that is unacked for 230 seconds; to get the efficiency
 // constraints, generate a spanning tree, so we only have to send one meesage to

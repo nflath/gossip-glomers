@@ -1,5 +1,6 @@
-// With a single node, very easy.  Just maintain a local key-value store, update it every txn.
-// Would be harder if we had to deal with node crashes, of course.
+// With a single node, very easy.  Just maintain a local key-value store, update
+// it every txn.  Would be harder if we had to deal with node
+// crashes/persistence issues, of course.
 
 package main
 

@@ -1,6 +1,8 @@
 // This was a bit of a pain, mainly due to the key-value store being malicious.
 // Not only may it return past values, it always will - it will never converge,
-// no matter how long it waits.
+// no matter how long it waits.  It took me a bit to figure that out and deal
+// with that, rather than just assuming over a long enough period it would
+// converge.
 
 // Other than that, it's pretty chill.  Each node has a particular key in a
 // SeqKV it increments on send, and it keeps re-trying to set the value for a
@@ -54,7 +56,7 @@ func main() {
 		count = count + delta
 
 		for(true) {
-			// Try writing to the KV store untli we succeed.
+			// Try writing to the KV store until we succeed.
 			err := kv.Write(ctx, n.ID(), count)
 			if(err != nil) { log.Printf("Err on write: %s",err) }
 			v, err := kv.Read(ctx, n.ID())
