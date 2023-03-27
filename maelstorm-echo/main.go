@@ -1,4 +1,4 @@
-// This code is all just from the glossip-gloamers repository - more of just an
+// This code is all just from the gossip-glomers problem - more of just an
 // example of how everything works.
 
 package main

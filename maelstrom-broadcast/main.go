@@ -1,3 +1,12 @@
+// Whenever we get a message, just send it on to all neighbors (aside the one
+// that sent it to us.  To deal with partitions, have a retry mechanism and
+// retry any message that is unacked for 230 seconds; to get the efficiency
+// constraints, generate a spanning tree, so we only have to send one meesage to
+// each node per client request, and it's constructed with # children to limit
+// the number of hops any message will need to make.
+
+// The main thing that was a pain was realizing that the msg_id I was setting
+// was getting overwritten by the framework.
 package main
 
 import (
@@ -21,7 +30,8 @@ type BroadcastData struct{
 	val float64
 }
 
-
+// Generate a spanning tree.  TODO(nflath): Pass in the number of nodes, and
+// figure out the optimal number of children.
 func generate_topo(num_nodes int, num_children int) map[string][]interface{} {
 	topology := make(map[string][]interface{},0)
 
@@ -58,16 +68,21 @@ func generate_topo(num_nodes int, num_children int) map[string][]interface{} {
 func main() {
 	n := maelstrom.NewNode()
 
+	// Next message ID to send.  Trying to set a value for it yourself causes
+	// the framework to overwrite it, so keep track of what msg_id will be set manually.
 	var nextId float64 = 1
 
+	// Have both a slice containing all values, and a map (for testing prescence to stop re-sends)
 	messages := make(map[float64]bool)
 	var messages_arr []float64
+
 	var mu sync.Mutex
 
-	neighbors := make([]interface{},0)
+	var neighbors []interface{}
 	outstanding_messages := make(map[BroadcastState]BroadcastData)
 
 	broadcast_ok := func(msg maelstrom.Message) error {
+		// If we receive an ack to a message we send, stop retrying the message
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -77,14 +92,15 @@ func main() {
 		}
 
 		bs := BroadcastState{msg_id: body["msg_id"].(float64), node: msg.Src}
-		log.Printf("Deleting %s %s", bs, len(outstanding_messages))
 		delete(outstanding_messages,bs)
-		log.Printf("Deleting %s %s", bs, len(outstanding_messages))
-
+		
 		return nil
 	}
 
 	timeoutLoop := func() {
+		// Every 10ms, see if there are any messages that have 'timed out'(no
+		// response within 230 m) and if so retry them.
+		// TODO(nflath): make the timeouts configurable
 		for(true) {
 			{
 				mu.Lock()
@@ -112,12 +128,12 @@ func main() {
 			}
 		}
 	}
-
-	// Register a handler for the "echo" message that responds with an "echo_ok".
+	go timeoutLoop()
+	
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		mu.Lock()
 		defer mu.Unlock()
-		// Unmarshal the message body as an loosely-typed map.
+		
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
@@ -128,26 +144,26 @@ func main() {
 		messages[message.(float64)] = true
 
 		if(ok) {
+			// If we already have this message, we don't need to send it on to our neighbors.
 			body["type"] = "broadcast_ok"
 			delete(body, "message")
 			return n.Reply(msg, body)
 		}
 
+
 		messages_arr = append(messages_arr, message.(float64))
 
+		// Send this to each neighbor other than where it came from.  Register
+		// it so that if we don't hear a response, we retry.
 		for _, neighbor := range neighbors {
 			if(neighbor == msg.Src) {
 				continue;
 			}
-			log.Printf("%s %s", neighbor, msg.Src)
-
-
 			bs := BroadcastState{msg_id: nextId, node: neighbor.(string)}
 			nextId = nextId + 1
 			bd := BroadcastData{val: message.(float64), time: time.Now().Add(220 * time.Millisecond)}
 
-			n.pRPC(neighbor.(string), body, broadcast_ok)
-
+			n.RPC(neighbor.(string), body, broadcast_ok)
 			outstanding_messages[bs] = bd
 
 		}
@@ -159,7 +175,6 @@ func main() {
 
 
 	n.Handle("read", func(msg maelstrom.Message) error {
-		// Unmarshal the message body as an loosely-typed map.
 		mu.Lock()
 		defer mu.Unlock()
 		var body map[string]any
@@ -167,39 +182,24 @@ func main() {
 			return err
 		}
 
-		// Update the message type.
 		body["type"] = "read_ok"
 		body["messages"] = messages_arr
-
-		// Echo the original message back with the updated message type.
 		return n.Reply(msg, body)
 	})
 
 	n.Handle("topology", func(msg maelstrom.Message) error {
+		// TODO(nflath): Use this to get the list of node names, but otherwise ignore
+		// it.
 		mu.Lock()
 		defer mu.Unlock()
-		// Unmarshal the message body as an loosely-typed map.
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
 
-		//topo := body["topology"]
-		//var topology map[string]interface{} = topo.(map[string]interface{})
 		var topology map[string][]interface{} = generate_topo(25,3)
 		neighbors = topology[n.ID()]
-		log.Printf("topo %s", topology)
-		log.Printf("neighbors:: %s", neighbors)
+		
 		delete(body, "topology")
-
-		// Update the message type.
 		body["type"] = "topology_ok"
-
-		// Echo the original message back with the updated message type.
 		return n.Reply(msg, body)
 	})
-
-	go timeoutLoop()
 
 	// Execute the node's message loop. This will run until STDIN is closed.
 	if err := n.Run(); err != nil {
