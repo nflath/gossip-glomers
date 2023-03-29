@@ -37,7 +37,17 @@ func main() {
 
 		if(n.ID() == "n1") {
 			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
-			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			
+			reply_msg, _ := n.SyncRPC(ctx, "n0", msg.Body)
+			var body map[string]any
+			if err := json.Unmarshal(reply_msg.Body, &body); err != nil {
+				return err
+			}
+
+			reply_body := make(map[string]any)
+			reply_body["type"] = "send_ok"
+			reply_body["offset"] = body["offset"]
+
 			return n.Reply(msg, reply_body)
 		}
 
@@ -45,8 +55,15 @@ func main() {
 		defer mu.Unlock()
 
 		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
+		if(msg.Src == "n1") {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				body = body["body"].(map[string]any)
+				return err
+			}
+		} else {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				return err
+			}
 		}
 
 		key := body["key"].(string)
@@ -90,7 +107,17 @@ func main() {
 	n.Handle("poll", func(msg maelstrom.Message) error {
 		if(n.ID() == "n1") {
 			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
-			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			
+			reply_msg, _ := n.SyncRPC(ctx, "n0", msg.Body)
+			var body map[string]any
+			if err := json.Unmarshal(reply_msg.Body, &body); err != nil {
+				return err
+			}
+
+			reply_body := make(map[string]any)
+			reply_body["type"] = "poll_ok"
+			reply_body["msgs"] = body["msgs"]
+
 			return n.Reply(msg, reply_body)
 		}
 
@@ -98,8 +125,15 @@ func main() {
 		defer mu.Unlock()
 
 		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-		 	return err
+		if(msg.Src == "n1") {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				body = body["body"].(map[string]any)
+				return err
+			}
+		} else {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				return err
+			}
 		}
 				
 		var offsets map[string]interface{} = body["offsets"].(map[string]interface{})
@@ -127,7 +161,16 @@ func main() {
 
 		if(n.ID() == "n1") {
 			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
-			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			
+			reply_msg, _ := n.SyncRPC(ctx, "n0", msg.Body)
+			var body map[string]any
+			if err := json.Unmarshal(reply_msg.Body, &body); err != nil {
+				return err
+			}
+
+			reply_body := make(map[string]any)
+			reply_body["type"] = "commit_offsets_ok"
+			
 			return n.Reply(msg, reply_body)
 		}
 
@@ -135,8 +178,15 @@ func main() {
 		defer mu.Unlock()
 
 		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-		 	return err
+		if(msg.Src == "n1") {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				body = body["body"].(map[string]any)
+				return err
+			}
+		} else {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				return err
+			}
 		}
 		
 		var offsets map[string]interface{} = body["offsets"].(map[string]interface{})
@@ -155,7 +205,16 @@ func main() {
 		
 		if(n.ID() == "n1") {
 			ctx, _ := context.WithTimeout(context.Background(),230 * time.Millisecond)
-			reply_body, _ := n.SyncRPC(ctx, "n0", msg)
+			
+			reply_msg, _ := n.SyncRPC(ctx, "n0", msg.Body)
+			var body map[string]any
+			if err := json.Unmarshal(reply_msg.Body, &body); err != nil {
+				return err
+			}
+
+			reply_body := make(map[string]any)
+			reply_body["type"] = "list_committed_offsets_ok"
+			reply_body["offsets"] = body["offsets"]
 			return n.Reply(msg, reply_body)
 		}
 		
@@ -164,8 +223,15 @@ func main() {
 
 
 		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-		 	return err
+		if(msg.Src == "n1") {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				body = body["body"].(map[string]any)
+				return err
+			}
+		} else {
+			if err := json.Unmarshal(msg.Body, &body); err != nil {
+				return err
+			}
 		}
 		keys := body["keys"].([]interface{})
 
